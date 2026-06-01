@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# バックアップ
+*.bak
+
+# ローカルAPI時代の残骸（Firebase化したので不要だが、参考用に残す。デプロイには含めない）
+server.py
+
+# ログ・一時ファイル
+*.log
+/tmp/

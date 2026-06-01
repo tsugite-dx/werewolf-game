@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>人狼ゲーム 進行アプリ</title>
+<style>
+  :root{
+    --bg:#10131a; --panel:#1a1f2b; --panel2:#222838; --line:#2e3650;
+    --text:#e8ecf5; --sub:#9aa6c0; --accent:#e0b341; --accent2:#7c5cff;
+    --vill:#4f9d69; --wolf:#c0453d; --mad:#b5683f; --danger:#c0453d;
+    --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+    background:var(--bg); color:var(--text);
+    line-height:1.6; -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:560px; margin:0 auto; padding:18px 16px 64px;}
+  h1{font-size:1.5rem; margin:.2em 0 .1em; letter-spacing:.04em;}
+  h2{font-size:1.2rem; margin:1.2em 0 .5em; border-left:4px solid var(--accent); padding-left:.5em;}
+  h3{font-size:1.02rem; margin:1em 0 .3em;}
+  p{margin:.4em 0;}
+  .sub{color:var(--sub); font-size:.9rem;}
+  .center{text-align:center;}
+
+  button{font-family:inherit; cursor:pointer; border:none;}
+  .btn{
+    display:block; width:100%; padding:16px; margin:10px 0;
+    background:var(--accent); color:#1a1408; font-weight:700; font-size:1.05rem;
+    border-radius:var(--radius); transition:transform .05s, opacity .2s;
+  }
+  .btn:active{transform:scale(.98);}
+  .btn.sec{background:var(--panel2); color:var(--text); border:1px solid var(--line);}
+  .btn.ghost{background:transparent; color:var(--sub); border:1px solid var(--line);}
+  .btn.wolf{background:var(--wolf); color:#fff;}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .btn.small{display:inline-block; width:auto; padding:8px 14px; font-size:.9rem; margin:4px;}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin:12px 0;}
+  .panel{background:var(--panel2); border-radius:12px; padding:12px; margin:8px 0;}
+  .row{display:flex; align-items:center; gap:10px;}
+  .row.between{justify-content:space-between;}
+  .pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:.78rem; font-weight:700;}
+  .pill.vill{background:rgba(79,157,105,.2); color:#7fd99a;}
+  .pill.wolf{background:rgba(192,69,61,.22); color:#ef8b84;}
+  .pill.mad{background:rgba(181,104,63,.22); color:#e2a072;}
+
+  .hidden{display:none !important;}
+
+  /* セットアップ：役職カウンター */
+  .counter{display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line);}
+  .counter:last-child{border-bottom:none;}
+  .counter .info{flex:1;}
+  .counter .name{font-weight:700;}
+  .counter .ctrl{display:flex; align-items:center; gap:12px;}
+  .stepbtn{width:38px; height:38px; border-radius:10px; background:var(--panel); border:1px solid var(--line); color:var(--text); font-size:1.3rem; line-height:1; font-weight:700;}
+  .stepbtn:active{background:var(--accent); color:#1a1408;}
+  .count-num{min-width:24px; text-align:center; font-size:1.2rem; font-weight:700;}
+
+  .total-bar{position:sticky; bottom:0; background:var(--bg); padding:12px 0 0; border-top:1px solid var(--line); margin-top:8px;}
+  .total-bar.warn .total-num{color:var(--danger);}
+  .total-num{font-weight:700; font-size:1.1rem;}
+
+  /* 配役・役職表示 */
+  .role-big{text-align:center; padding:24px 12px;}
+  .role-emoji{font-size:4rem; line-height:1;}
+  .role-name{font-size:2rem; font-weight:800; margin:.2em 0;}
+
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:12px;}
+  .qrcell{background:#fff; border-radius:12px; padding:10px; text-align:center; color:#222;}
+  .qrcell .qimg{display:flex; justify-content:center;}
+  .qrcell .qimg svg{width:110px; height:110px;}
+  .qrbig{background:#fff; border-radius:16px; padding:16px; margin:14px auto; max-width:340px; display:flex; justify-content:center;}
+  .qrbig svg{width:100%; max-width:300px; height:auto; display:block;}
+  .qrcell .plabel{font-weight:700; margin-top:6px; color:#222;}
+
+  /* フルスクリーンの役職オーバーレイ */
+  .overlay{position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column; justify-content:center; padding:24px; overflow:auto;}
+
+  .stepper{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;}
+  .tag{font-size:.8rem; color:var(--sub); background:var(--panel2); padding:2px 8px; border-radius:6px;}
+
+  .script-say{background:var(--panel2); border-left:4px solid var(--accent2); padding:12px 14px; border-radius:8px; margin:8px 0; font-size:1.05rem;}
+  .script-note{color:var(--sub); font-size:.88rem; margin:4px 0 0;}
+  .phasehdr{display:flex; align-items:center; gap:10px; margin-top:6px;}
+  .phasehdr .badge{background:var(--accent2); color:#fff; padding:4px 12px; border-radius:999px; font-weight:700; font-size:.9rem;}
+
+  /* 生存者管理 */
+  .players{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px;}
+  .pchip{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 6px; text-align:center; font-weight:700; font-size:.92rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .pchip.dead{opacity:.35; text-decoration:line-through; background:transparent;}
+  .pchip.sel{background:var(--accent); color:#1a1408; border-color:var(--accent);}
+  .winbox{display:flex; gap:10px; margin:10px 0;}
+  .winbox .b{flex:1; text-align:center; padding:10px; border-radius:10px; font-weight:700;}
+  .winbox .b.v{background:rgba(79,157,105,.18); color:#7fd99a;}
+  .winbox .b.w{background:rgba(192,69,61,.18); color:#ef8b84;}
+  .winbox .num{font-size:1.6rem;}
+
+  /* ルールブック */
+  details{background:var(--panel); border:1px solid var(--line); border-radius:12px; margin:8px 0; overflow:hidden;}
+  summary{padding:14px 16px; font-weight:700; cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center;}
+  summary::-webkit-details-marker{display:none;}
+  summary::after{content:"＋"; color:var(--accent);}
+  details[open] summary::after{content:"−";}
+  details .body{padding:0 16px 14px; color:var(--sub);}
+  details .body strong{color:var(--text);}
+  .do{color:#7fd99a;} .dont{color:#ef8b84;}
+  .twocol{display:grid; gap:6px; margin:8px 0;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .topbar .back{color:var(--sub); background:none; font-size:.95rem; padding:6px;}
+  .footnote{color:var(--sub); font-size:.8rem; margin-top:24px; text-align:center;}
+  .warnbox{background:rgba(192,69,61,.12); border:1px solid rgba(192,69,61,.4); border-radius:10px; padding:10px 12px; font-size:.88rem; color:#f0b3ae; margin:10px 0;}
+  .okbox{background:rgba(79,157,105,.12); border:1px solid rgba(79,157,105,.4); border-radius:10px; padding:10px 12px; font-size:.88rem; color:#a7e0ba; margin:10px 0;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<!-- QRライブラリ（ネット接続時のみ。1台回しモードはオフラインで動く） -->
+<script src="qrcode.js"></script>
+
+<!-- ===== Firebase Realtime Database 接続（CDN モジュール） ===== -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded, remove, off } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDs0TcvoddfDJaFuWh8FzVVCAk3GbhOWAs",
+  authDomain: "werewolf-game-28a40.firebaseapp.com",
+  databaseURL: "https://werewolf-game-28a40-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "werewolf-game-28a40",
+  storageBucket: "werewolf-game-28a40.firebasestorage.app",
+  messagingSenderId: "126731751701",
+  appId: "1:126731751701:web:8e2afc8d7d594b8e74d91c"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// 今は固定のゲームID（1卓のみ）。将来ルームコード化する
+const GAME_ID = 'default';
+
+// 既存のSYNCインターフェースを実装。これを window に登録して、
+// メインスクリプト側がフォールバックから差し替える。
+window.__firebaseSYNC = {
+  async postEvent(idx, type, day, extra){
+    try{
+      const r = ref(db, `games/${GAME_ID}/events/${idx}`);
+      await push(r, Object.assign({type, day, ts: Date.now()}, extra||{}));
+    }catch(e){ console.warn('postEvent failed', e); }
+  },
+  subscribePlayer(idx, cb){
+    const r = ref(db, `games/${GAME_ID}/events/${idx}`);
+    const handler = (snap)=>{
+      const ev = snap.val();
+      if(ev) cb([ev]);
+    };
+    onChildAdded(r, handler);
+    return ()=> off(r, 'child_added', handler);
+  },
+  async resetAll(){
+    try{
+      const r = ref(db, `games/${GAME_ID}`);
+      await remove(r);
+    }catch(e){ console.warn('resetAll failed', e); }
+  },
+  async broadcastGameOver(idxList, winner, day){
+    await Promise.all(idxList.map(i=> this.postEvent(i, 'gameover', day, {winner})));
+  },
+  apiAvail: ()=> true
+};
+
+window.dispatchEvent(new CustomEvent('firebase-ready'));
+console.log('[Firebase] 接続完了 / gameId=' + GAME_ID);
+</script>
+<script>
+/* =========================================================
+   人狼ゲーム 進行アプリ（1ファイル / サーバーレス）
+   - 配役 + GM台本 + ルールブック（読むだけ版）
+   - 配布: 各自スマホ(QR) / 1台で回す(カードめくり) の2モード
+   ========================================================= */
+
+/* ---- 役職定義（標準セット） ---- */
+const ROLES = {
+  villager: { id:'villager', name:'村人',   emoji:'🧑‍🌾', team:'村', side:'村陣営',   color:'vill',
+    night:'なし',
+    can:['昼の議論と投票に参加する'],
+    cant:['夜に特別な能力はない'],
+    mistake:'特別な役職じゃなくても、議論で人狼を追い詰める一番大事な役。' },
+  werewolf: { id:'werewolf', name:'人狼',   emoji:'🐺', team:'人狼', side:'人狼陣営', color:'wolf',
+    night:'毎晩1人を襲撃',
+    can:['夜に仲間の人狼を確認できる','毎晩、村人を1人襲撃できる','昼は村人のフリをする'],
+    cant:['占い師に占われると「人狼」とバレる','騎士に護衛された人は襲撃できない'],
+    mistake:'襲撃する相手は人狼チームで1人に絞る。バラけると誰も死なない卓もある（GM裁定）。' },
+  seer:     { id:'seer', name:'占い師', emoji:'🔮', team:'村', side:'村陣営', color:'vill',
+    night:'毎晩1人の正体を知る',
+    can:['毎晩1人を選び「人狼か/人狼でないか」を知る'],
+    cant:['役職の細かい種類までは分からない（人狼か否かだけ）'],
+    mistake:'狂人を占うと「人狼ではない（＝白）」と出る。狂人は人間判定なので注意。' },
+  knight:   { id:'knight', name:'騎士', emoji:'🛡️', team:'村', side:'村陣営', color:'vill',
+    night:'毎晩1人を護衛',
+    can:['毎晩1人を選び、その夜の人狼の襲撃から守る'],
+    cant:['自分を守れるかは卓のルール次第（ルールブック参照）','処刑は防げない（夜の襲撃だけ防ぐ）'],
+    mistake:'狩人(かりうど)とも呼ぶ。誰を守るかは口に出さず指差しで。' },
+  medium:   { id:'medium', name:'霊媒師', emoji:'📿', team:'村', side:'村陣営', color:'vill',
+    night:'前日処刑された人の正体を知る',
+    can:['昼に処刑された人が「人狼だったか/人間だったか」を夜に知る'],
+    cant:['襲撃で死んだ人は対象外（処刑された人だけ）'],
+    mistake:'霊能者(れいのうしゃ)とも呼ぶ。占い師と役割を混同しないこと。' },
+  madman:   { id:'madman', name:'狂人', emoji:'🤡', team:'人狼', side:'人狼陣営', color:'mad',
+    night:'なし（ただし人狼を勝たせたい）',
+    can:['昼の議論・投票に参加','人狼陣営の勝利が自分の勝ち'],
+    cant:['夜の能力はない','人狼が誰かは分からない（人狼側も狂人が誰か分からない）'],
+    mistake:'占われると「人狼ではない（白）」と出る人間。でも勝利条件は人狼側。村をかき乱す役。' },
+};
+const ROLE_ORDER = ['villager','werewolf','seer','knight','medium','madman'];
+
+/* ---- 人数別おすすめ構成 ---- */
+function recommend(n){
+  const t = {
+    3:{werewolf:1,seer:1,villager:1},
+    4:{werewolf:1,seer:1,villager:2},
+    5:{werewolf:1,seer:1,knight:1,villager:2},
+    6:{werewolf:1,seer:1,knight:1,medium:1,villager:2},
+    7:{werewolf:2,seer:1,knight:1,villager:3},
+    8:{werewolf:2,seer:1,knight:1,medium:1,villager:3},
+    9:{werewolf:2,seer:1,knight:1,medium:1,madman:1,villager:3},
+    10:{werewolf:3,seer:1,knight:1,medium:1,madman:1,villager:3},
+    11:{werewolf:3,seer:1,knight:1,medium:1,madman:1,villager:4},
+    12:{werewolf:3,seer:1,knight:1,medium:1,madman:1,villager:5},
+  };
+  if(t[n]) return {...t[n]};
+  // 範囲外はざっくり比率で
+  const w = Math.max(1, Math.round(n/4));
+  const base={werewolf:w,seer:1,knight:1,medium:1,madman:1};
+  const used=Object.values(base).reduce((a,b)=>a+b,0);
+  base.villager=Math.max(0,n-used);
+  return base;
+}
+
+/* ---- 状態 ---- */
+let comp = {};          // {roleId:count}
+let assignment = [];    // [{idx, roleId}]
+let game = null;        // 台本モードの状態
+
+/* ---- ユーティリティ ---- */
+const $ = (sel,el=document)=>el.querySelector(sel);
+const app = document.getElementById('app');
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+function totalCount(){ return Object.values(comp).reduce((a,b)=>a+(b||0),0); }
+function encodeRole(idx,roleId,total,name){ return btoa(unescape(encodeURIComponent(JSON.stringify({i:idx,r:roleId,t:total,n:name||''})))); }
+function decodeRole(s){ try{ return JSON.parse(decodeURIComponent(escape(atob(s)))); }catch(e){ return null; } }
+function roleUrl(idx,roleId,total,name){
+  const base = location.origin + location.pathname;
+  return base + '?p=' + encodeRole(idx,roleId,total,name);
+}
+
+/* =========================================================
+   ルーティング
+   ========================================================= */
+function render(){
+  // 役職表示ページ（?p=...）優先
+  const params = new URLSearchParams(location.search);
+  if(params.get('p')){ renderPlayerRole(params.get('p')); return; }
+  renderHome();
+}
+
+/* ---- ホーム ---- */
+function renderHome(){
+  app.innerHTML = `
+    <div class="center" style="padding-top:18px;">
+      <div style="font-size:3rem;">🐺</div>
+      <h1>人狼ゲーム</h1>
+      <p class="sub">集まってワイワイ遊ぶ用・進行アプリ</p>
+    </div>
+    <button class="btn" id="start">🎭 ゲームを始める（GM）</button>
+    <button class="btn sec" id="rules">📖 ルールブック</button>
+    <p class="footnote">役職を配って、GMの台本どおり進めるだけ。<br>判定で迷ったらルールブックを開けば一発。</p>
+  `;
+  $('#start').onclick = renderSetup;
+  $('#rules').onclick = renderRules;
+}
+
+/* ---- セットアップ（人数→役職構成） ---- */
+function renderSetup(){
+  if(totalCount()===0) comp = recommend(8);
+  app.innerHTML = `
+    <div class="topbar"><button class="back" id="back">← 戻る</button><span class="sub">セットアップ</span></div>
+    <h2>参加人数とおすすめ構成</h2>
+    <div class="card">
+      <div class="row between">
+        <span>参加人数を選ぶ</span>
+        <div class="ctrl row">
+          <button class="stepbtn" id="nMinus">−</button>
+          <span class="count-num" id="nNum"></span>
+          <button class="stepbtn" id="nPlus">＋</button>
+        </div>
+      </div>
+      <button class="btn sec small" id="autofill" style="margin-top:10px;">この人数のおすすめ構成にする</button>
+    </div>
+
+    <h2>役職の内訳（微調整できる）</h2>
+    <div class="card" id="counters"></div>
+
+    <div class="total-bar" id="totalBar">
+      <div class="row between">
+        <span class="total-num">合計 <span id="ctotal"></span>人</span>
+        <span class="sub" id="balance"></span>
+      </div>
+      <button class="btn" id="deal" style="margin-top:8px;">🎲 配役する</button>
+    </div>
+  `;
+  $('#back').onclick = renderHome;
+  let n = totalCount();
+  const drawCounters = ()=>{
+    const c = $('#counters');
+    c.innerHTML = ROLE_ORDER.map(rid=>{
+      const r = ROLES[rid]; const v = comp[rid]||0;
+      return `<div class="counter">
+        <div class="info">
+          <span class="name">${r.emoji} ${r.name}</span>
+          <span class="pill ${r.color}">${r.side}</span>
+          <div class="sub">${r.night}</div>
+        </div>
+        <div class="ctrl">
+          <button class="stepbtn" data-m="${rid}">−</button>
+          <span class="count-num">${v}</span>
+          <button class="stepbtn" data-p="${rid}">＋</button>
+        </div>
+      </div>`;
+    }).join('');
+    c.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{ comp[b.dataset.p]=(comp[b.dataset.p]||0)+1; refresh(); });
+    c.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{ comp[b.dataset.m]=Math.max(0,(comp[b.dataset.m]||0)-1); refresh(); });
+  };
+  const refresh = ()=>{
+    $('#nNum').textContent = n;
+    const tot = totalCount();
+    $('#ctotal').textContent = tot;
+    const wolves = comp.werewolf||0;
+    const ok = (tot===n) && wolves>=1 && tot>=3;
+    $('#totalBar').classList.toggle('warn', tot!==n);
+    let msg='';
+    if(tot!==n) msg = `人数(${n})と合計(${tot})が違う`;
+    else if(wolves<1) msg='人狼が0人やで';
+    else if(tot<3) msg='最低3人から';
+    else msg = `人狼${wolves} / 村側${tot-wolves}`;
+    $('#balance').textContent = msg;
+    $('#deal').disabled = !ok;
+    drawCounters();
+  };
+  $('#nMinus').onclick=()=>{ n=Math.max(3,n-1); refresh(); };
+  $('#nPlus').onclick=()=>{ n=Math.min(20,n+1); refresh(); };
+  $('#autofill').onclick=()=>{ comp=recommend(n); refresh(); };
+  $('#deal').onclick=()=>{ dealRoles(); };
+  refresh();
+}
+
+/* ---- 配役 ---- */
+function dealRoles(){
+  const pool=[];
+  ROLE_ORDER.forEach(rid=>{ for(let k=0;k<(comp[rid]||0);k++) pool.push(rid); });
+  shuffle(pool);
+  // 名前は既存assignmentに残ってれば引き継ぐ（再配役で名前が消えないように）
+  const prev = {};
+  (assignment||[]).forEach(a=>{ if(a.name) prev[a.idx]=a.name; });
+  assignment = pool.map((rid,i)=>({idx:i+1, roleId:rid, name: prev[i+1] || ''}));
+  // 新しい配役 = 新ゲーム開始扱い → サーバーの古いイベントを消す
+  // （これをやらないと、前回の死亡イベントが残ってて新プレイヤーに誤通知される）
+  SYNC.resetAll();
+  renderDistribute();
+}
+
+/* 番号→表示名（名前あれば「3 タカシ」、なければ「3」） */
+function nameOf(idx){
+  const a = (assignment||[]).find(x=>x.idx===idx);
+  return (a && a.name) ? `${idx} ${a.name}` : `${idx}`;
+}
+function pNameOf(idx){ // 「プレイヤー3」or「タカシさん（3）」
+  const a = (assignment||[]).find(x=>x.idx===idx);
+  return (a && a.name) ? `${a.name}さん（${idx}）` : `プレイヤー${idx}`;
+}
+
+/* ---- 配り方の選択 ---- */
+function renderDistribute(){
+  const named = (assignment||[]).filter(a=>a.name).length;
+  const total = assignment.length;
+  app.innerHTML = `
+    <div class="topbar"><button class="back" id="back">← 構成に戻る</button><span class="sub">配役できた（${total}人）</span></div>
+    <div class="card">
+      <div class="row between">
+        <div>
+          <div style="font-weight:700;">名前を登録（任意）</div>
+          <div class="sub">登録すると、GM台本に「3 タカシ」と表示されます</div>
+        </div>
+        <div class="pill ${named===total?'vill':(named>0?'mad':'wolf')}">${named}/${total}</div>
+      </div>
+      <button class="btn sec small" id="namebtn" style="margin-top:8px;">${named>0?'名前を編集':'名前を入力する'}</button>
+    </div>
+    <h2>どうやって役職を配る？</h2>
+    <button class="btn" id="qr">📱 各自スマホで（QRを配る）</button>
+    <button class="btn sec" id="pass">🔄 1台で回す（カードめくり）</button>
+    <div class="okbox">迷ったら「1台で回す」。電波がなくても確実に動く。</div>
+    <button class="btn ghost" id="toscript" style="margin-top:18px;">配り終えた → GM台本を始める ▶</button>
+  `;
+  $('#back').onclick = renderSetup;
+  $('#namebtn').onclick = renderNames;
+  $('#qr').onclick = renderQR;
+  $('#pass').onclick = renderPassAround;
+  $('#toscript').onclick = startScript;
+}
+
+/* ---- 名前登録画面 ---- */
+function renderNames(){
+  app.innerHTML = `
+    <div class="topbar"><button class="back" id="back">← 配り方に戻る</button><span class="sub">名前登録（任意）</span></div>
+    <h2>プレイヤーの名前</h2>
+    <p class="sub">入れなくてもOK。入れた人だけGM台本に名前で表示されます。<br>※役職はランダム配役済みなので、名前を入れても役職はバレません。</p>
+    <div class="card" id="namelist"></div>
+    <button class="btn" id="save">保存して戻る</button>
+    <button class="btn ghost" id="clear">全部クリア</button>
+  `;
+  $('#back').onclick = ()=>{ saveNames(); renderDistribute(); };
+  $('#save').onclick = ()=>{ saveNames(); renderDistribute(); };
+  $('#clear').onclick = ()=>{
+    if(confirm('全員の名前を消す？')){ assignment.forEach(a=>a.name=''); renderNames(); }
+  };
+  const list = $('#namelist');
+  list.innerHTML = assignment.map(a=>`
+    <div class="counter">
+      <div class="info"><span class="name">プレイヤー ${a.idx}</span></div>
+      <input type="text" data-i="${a.idx}" value="${(a.name||'').replace(/"/g,'&quot;')}" placeholder="名前（任意）" maxlength="12"
+        style="flex:1; max-width:180px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-size:1rem;">
+    </div>`).join('');
+}
+function saveNames(){
+  document.querySelectorAll('#namelist input[data-i]').forEach(inp=>{
+    const a = assignment.find(x=>x.idx===Number(inp.dataset.i));
+    if(a) a.name = inp.value.trim().slice(0,12);
+  });
+}
+
+/* ---- QR配布モード ---- */
+/* QR配布：1人ずつ大きく出す */
+let qrIdx = 0;
+function renderQR(){
+  qrIdx = 0;
+  showQROne();
+}
+function showQROne(){
+  const isFile = location.protocol === 'file:';
+  const isLocalhost = ['localhost','127.0.0.1','0.0.0.0'].includes(location.hostname);
+  if(qrIdx >= assignment.length){
+    app.innerHTML = `
+      <div class="center" style="padding-top:40px;">
+        <div style="font-size:3rem;">✅</div>
+        <h2 style="border:none;justify-content:center;">全員に配り終えた</h2>
+        <button class="btn" id="toscript">GM台本を始める ▶</button>
+        <button class="btn ghost" id="again">もう一度配り直す</button>
+        <button class="btn ghost" id="back">← 配り方に戻る</button>
+      </div>`;
+    $('#toscript').onclick = startScript;
+    $('#again').onclick = renderQR;
+    $('#back').onclick = renderDistribute;
+    return;
+  }
+  const a = assignment[qrIdx];
+  const url = roleUrl(a.idx,a.roleId,assignment.length,a.name);
+  app.innerHTML = `
+    <div class="topbar"><button class="back" id="back">← 配り方に戻る</button><span class="sub">QR配布 ${qrIdx+1}/${assignment.length}</span></div>
+    ${isFile ? `<div class="warnbox">⚠️ ファイルを直接開いてる（file://）ので、他人のスマホではQRの先が開けません。実際の配布には、このHTMLをネット上（Vercel等）に置く必要があります。今すぐ試すなら「1台で回す」モードを。</div>` : ''}
+    ${(!isFile && isLocalhost) ? `<div class="warnbox">⚠️ いま <strong>localhost</strong> でアクセスしてるので、スマホでQRを読んでも「サーバーに接続できない」になります。<br>PCのSafariを <strong>http://[このPCのLAN内IP]:${location.port||'80'}</strong> で開き直してから、再度配役してください（同じWi-Fi必須）。</div>` : ''}
+    <div class="center" style="padding-top:8px;">
+      <div style="font-size:1.8rem; font-weight:800; margin:.2em 0;">${pNameOf(a.idx)} の番</div>
+      <p class="sub" style="margin-top:0;">自分のスマホのカメラで、下のQRを読んでください。<br>役職は本人だけが見ます。</p>
+    </div>
+    <div class="qrbig" id="qbig"></div>
+    <p class="sub center" style="margin-top:8px;">読めない時はもう少し近づけて／画面を明るく</p>
+    <button class="btn" id="next">読めた → 次のプレイヤーへ ▶</button>
+    <div class="row" style="gap:8px; margin-top:6px;">
+      <button class="btn ghost" id="prev" style="flex:1; margin:0;" ${qrIdx===0?'disabled':''}>← 前の人</button>
+      <button class="btn ghost" id="skip" style="flex:1; margin:0;">スキップ →</button>
+    </div>
+    <p class="sub center" style="margin-top:10px;">残り ${assignment.length - qrIdx - 1} 人</p>
+  `;
+  $('#back').onclick = renderDistribute;
+  $('#next').onclick = ()=>{ qrIdx++; showQROne(); };
+  $('#skip').onclick = ()=>{ qrIdx++; showQROne(); };
+  $('#prev').onclick = ()=>{ if(qrIdx>0){ qrIdx--; showQROne(); } };
+  const big = $('#qbig');
+  if(typeof qrcode==='function'){
+    const qr=qrcode(0,'M'); qr.addData(url); qr.make();
+    big.innerHTML=qr.createSvgTag({cellSize:10, margin:2});
+  } else {
+    big.innerHTML='<div class="warnbox">QRライブラリを読み込めません。ページを再読み込みしてください。</div>';
+  }
+}
+
+/* ---- 1台で回す（カードめくり）モード ---- */
+let passIdx = 0;
+function renderPassAround(){
+  passIdx = 0;
+  showPassCard();
+}
+function showPassCard(){
+  if(passIdx >= assignment.length){
+    app.innerHTML = `
+      <div class="center" style="padding-top:40px;">
+        <div style="font-size:3rem;">✅</div>
+        <h2 style="border:none;justify-content:center;">全員に配り終えた</h2>
+        <button class="btn" id="toscript">GM台本を始める ▶</button>
+        <button class="btn ghost" id="again">もう一度配り直す</button>
+      </div>`;
+    $('#toscript').onclick = startScript;
+    $('#again').onclick = renderPassAround;
+    return;
+  }
+  const a = assignment[passIdx];
+  // まず「次の人へ渡す」確認画面
+  app.innerHTML = `
+    <div class="overlay center">
+      <div style="font-size:2.5rem;">📲</div>
+      <h2 style="border:none;justify-content:center;">${pNameOf(a.idx)} の番</h2>
+      <p class="sub">他の人は画面を見ないでください。<br>本人だけが下のボタンを押す。</p>
+      <button class="btn" id="reveal" style="margin-top:24px;">自分の役職を見る 👁️</button>
+      <p class="sub" style="margin-top:24px;">残り ${assignment.length - passIdx} 人</p>
+    </div>`;
+  $('#reveal').onclick = ()=> showPassReveal(a);
+}
+function showPassReveal(a){
+  const r = ROLES[a.roleId];
+  app.innerHTML = `
+    <div class="overlay">
+      <div class="role-big">
+        <div class="role-emoji">${r.emoji}</div>
+        <div class="role-name">${r.name}</div>
+        <span class="pill ${r.color}">${r.side}</span>
+        <p style="margin-top:14px;">夜の能力：<strong>${r.night}</strong></p>
+      </div>
+      <div class="card">
+        <h3>できること</h3>
+        ${r.can.map(x=>`<div class="do">○ ${x}</div>`).join('')}
+        <h3 style="margin-top:10px;">注意</h3>
+        ${r.cant.map(x=>`<div class="dont">× ${x}</div>`).join('')}
+      </div>
+      <button class="btn wolf" id="done">確認した → 次の人へ ▶</button>
+      <p class="sub center">覚えたらこのボタン。次の人に渡す前に必ず押す。</p>
+    </div>`;
+  $('#done').onclick = ()=>{ passIdx++; showPassCard(); };
+}
+
+/* ---- 役職表示ページ（QRから開く / ?p=...） ---- */
+function renderPlayerRole(code){
+  const d = decodeRole(code);
+  if(!d || !ROLES[d.r]){
+    app.innerHTML = `<div class="center" style="padding-top:60px;"><h2 style="border:none;justify-content:center;">QRが読めませんでした</h2><p class="sub">GMにもう一度QRを出してもらってください。</p></div>`;
+    return;
+  }
+  const r = ROLES[d.r];
+  const youAre = d.n ? `${d.n} さん（プレイヤー ${d.i}）` : `プレイヤー ${d.i}`;
+  let lastDeath = null; // 受信した死亡イベント
+
+  // 「カバー → 表示 → 隠す」をループできるように関数化
+  const showCover = ()=>{
+    if(lastDeath) return showDeath(lastDeath);
+    app.innerHTML = `
+      <div class="overlay center">
+        <div style="font-size:2.5rem;">🤫</div>
+        <h2 style="border:none;justify-content:center;">あなたは ${youAre}</h2>
+        <p class="sub">周りに見られていないのを確認して<br>下のボタンを押してください。</p>
+        <button class="btn" id="show" style="margin-top:24px;">役職を確認する 👁️</button>
+      </div>`;
+    $('#show').onclick = showRole;
+  };
+  const showRole = ()=>{
+    if(lastDeath) return showDeath(lastDeath);
+    app.innerHTML = `
+      <div class="overlay">
+        <div class="role-big">
+          <div class="role-emoji">${r.emoji}</div>
+          <div class="role-name">${r.name}</div>
+          <span class="pill ${r.color}">${r.side}</span>
+          <p style="margin-top:14px;">夜の能力：<strong>${r.night}</strong></p>
+        </div>
+        <div class="card">
+          <h3>できること</h3>
+          ${r.can.map(x=>`<div class="do">○ ${x}</div>`).join('')}
+          <h3 style="margin-top:10px;">注意</h3>
+          ${r.cant.map(x=>`<div class="dont">× ${x}</div>`).join('')}
+          <p class="script-note" style="margin-top:10px;">💡 ${r.mistake}</p>
+        </div>
+        <button class="btn wolf" id="hide">見終わった（画面を隠す）</button>
+      </div>`;
+    $('#hide').onclick = showHidden;
+  };
+  const showHidden = ()=>{
+    if(lastDeath) return showDeath(lastDeath);
+    app.innerHTML = `
+      <div class="overlay center">
+        <div style="font-size:2.5rem;">🔒</div>
+        <p style="margin:14px 0 20px;">役職は確認済み。<br>GMの進行を待ってください。</p>
+        <button class="btn sec" id="reshow" style="max-width:280px; margin:8px auto;">👁️ もう一度確認する</button>
+        <p class="sub" style="margin-top:14px;">周りに見られないように注意</p>
+      </div>`;
+    $('#reshow').onclick = showRole;
+  };
+  const showDeath = (ev)=>{
+    const isAttack = ev.type === 'attacked';
+    const emoji = isAttack ? '🐺' : '⚖️';
+    const title = isAttack ? '襲撃されました' : '処刑されました';
+    const desc  = isAttack
+      ? `${ev.day}日目の夜、人狼に襲われました。`
+      : `${ev.day}日目の昼、村人たちの投票で処刑されました。`;
+    app.innerHTML = `
+      <div class="overlay" style="background:linear-gradient(180deg,#2a0d0d 0%,#10131a 70%);">
+        <div class="center" style="padding-top:24px;">
+          <div style="font-size:5rem; line-height:1;">${emoji}</div>
+          <h1 style="border:none; margin:.4em 0 .2em; color:#ef8b84;">${title}</h1>
+          <p style="font-size:1.05rem;">${desc}</p>
+          <p style="margin:1em 0;">あなたは <strong>脱落</strong> しました。</p>
+        </div>
+        <div class="warnbox">
+          <strong>死者ルール</strong><br>
+          ・議論に参加しない・声を出さない<br>
+          ・表情やジェスチャーで生きてる人にヒントを与えない<br>
+          ・スマホをチラ見せしない
+        </div>
+        <button class="btn sec" id="reshow">👁️ 自分だった役職を見る</button>
+        <p class="sub center" style="margin-top:10px;">${r.emoji} ${r.name}（${r.side}）</p>
+      </div>`;
+    $('#reshow').onclick = showRole;
+  };
+
+  const showGameOver = (ev)=>{
+    const isVillage = ev.winner==='village';
+    const myTeam = r.team; // '村' or '人狼'
+    const iWin = (isVillage && myTeam==='村') || (!isVillage && myTeam==='人狼');
+    const headEmoji = isVillage ? '🎉' : '🐺';
+    const headLabel = isVillage ? '村人陣営の勝ち' : '人狼陣営の勝ち';
+    const myResult = iWin
+      ? `<div class="okbox" style="font-size:1.2rem; text-align:center;"><strong>🏆 あなたの勝ちです！</strong></div>`
+      : `<div class="warnbox" style="font-size:1.2rem; text-align:center;"><strong>💧 あなたの負けです</strong></div>`;
+    app.innerHTML = `
+      <div class="overlay" style="background:linear-gradient(180deg,${isVillage?'#0d2a16':'#2a0d0d'} 0%,#10131a 70%);">
+        <div class="center" style="padding-top:24px;">
+          <div style="font-size:5rem;">${headEmoji}</div>
+          <h1 style="border:none;">${headLabel}</h1>
+          <p class="sub">${ev.day}日目で決着</p>
+        </div>
+        ${myResult}
+        <div class="card center">
+          <p class="sub" style="margin:0;">あなたの役職</p>
+          <div style="font-size:2.5rem;">${r.emoji}</div>
+          <div style="font-size:1.4rem; font-weight:800;">${r.name}</div>
+          <span class="pill ${r.color}">${r.side}</span>
+        </div>
+        <p class="sub center" style="margin-top:14px;">お疲れさまでした。<br>GMの案内を待ってください。</p>
+      </div>`;
+    if(navigator.vibrate) try{ navigator.vibrate(iWin?[100,50,100,50,200]:[300]); }catch(e){}
+  };
+
+  // 占い・霊媒の結果通知（オーバーレイで表示、閉じれば前の画面に戻る）
+  const showResultPopup = (ev)=>{
+    const isSeer = ev.type==='seer_result';
+    const icon = isSeer ? '🔮' : '📿';
+    const title = isSeer ? '占い結果' : '霊媒結果';
+    const subj = isSeer
+      ? `あなたが占った ${ev.target_name ? ev.target_name+'さん（'+ev.target_idx+'）' : 'プレイヤー'+ev.target_idx}`
+      : `${ev.day}日目に処刑された ${ev.target_name ? ev.target_name+'さん（'+ev.target_idx+'）' : 'プレイヤー'+ev.target_idx}`;
+    const result = ev.is_wolf
+      ? `<div class="warnbox" style="font-size:1.3rem; text-align:center;"><strong>🐺 人狼${isSeer?'':'だった'}</strong></div>`
+      : `<div class="okbox" style="font-size:1.3rem; text-align:center;"><strong>👤 人狼じゃない${isSeer?'':'（人間だった）'}</strong></div>`;
+    app.innerHTML = `
+      <div class="overlay">
+        <div class="center" style="padding-top:18px;">
+          <div style="font-size:4rem;">${icon}</div>
+          <h1 style="border:none;">${title}</h1>
+          <p>${subj} は…</p>
+        </div>
+        ${result}
+        <div class="card">
+          <p class="sub" style="margin:0;">この情報を昼にどう使うかは、あなたの戦略次第。<br>言うか黙るか、誰を疑うか。</p>
+        </div>
+        <button class="btn wolf" id="hidePop">見終わった（画面を隠す）</button>
+      </div>`;
+    $('#hidePop').onclick = ()=>{
+      if(lastDeath) showDeath(lastDeath);
+      else showHidden();
+    };
+    if(navigator.vibrate) try{ navigator.vibrate([80,40,80]); }catch(e){}
+  };
+
+  // 自分宛イベント購読（死亡 / 勝敗 / 占い結果 / 霊媒結果）
+  SYNC.subscribePlayer(d.i, (events)=>{
+    // 勝敗が最優先
+    const gameover = events.find(e=>e.type==='gameover');
+    if(gameover){ showGameOver(gameover); return; }
+    // 死亡通知（記録だけ。あとから来る結果通知より優先表示）
+    const death = events.find(e=>e.type==='attacked' || e.type==='executed');
+    if(death){
+      lastDeath = death;
+      showDeath(death);
+      if(navigator.vibrate) try{ navigator.vibrate([180,80,180]); }catch(e){}
+    }
+    // 占い・霊媒結果（最新のものを表示）
+    const result = events.filter(e=>e.type==='seer_result' || e.type==='medium_result').pop();
+    if(result) showResultPopup(result);
+  });
+
+  showCover();
+}
+
+/* =========================================================
+   GM台本モード
+   ========================================================= */
+function activeRoles(){ return ROLE_ORDER.filter(rid=>(comp[rid]||0)>0); }
+function has(rid){ return (comp[rid]||0)>0; }
+
+function startScript(){
+  game = {
+    day:1, phase:'day', // 初日は昼スタート（議論→投票）→ 夜 → 翌朝（襲撃結果）→ ...
+    alive: assignment.map(a=>({idx:a.idx, dead:false, cause:null})),
+    pick:{attack:null, guard:null, seer:null, execute:null}, // その日の選択
+    sent:{seer:'', medium:''}, // 送信済みマーク（"day:target" 形式で重複防止）
+    lastExecuted:null, // 前日処刑された人（霊媒用）
+  };
+  // 新ゲームなので、前回のイベントを全消去
+  SYNC.resetAll();
+  renderScript();
+}
+
+function roleOf(idx){ const a=assignment.find(x=>x.idx===idx); return a?a.roleId:null; }
+function alivePlayers(){ return game.alive.filter(p=>!p.dead); }
+function aliveWolves(){ // 生存している「人狼」だけ（狂人は含まない）
+  const wolfIdx = assignment.filter(a=>a.roleId==='werewolf').map(a=>a.idx);
+  return game.alive.filter(p=>!p.dead && wolfIdx.includes(p.idx)).length;
+}
+function aliveTotal(){ return game.alive.filter(p=>!p.dead).length; }
+
+function renderScript(){
+  const g = game;
+  const phaseName = {night:'🌙 夜', morning:'☀️ 朝', day:'🗣️ 昼（議論・投票）'}[g.phase];
+  app.innerHTML = `
+    <div class="topbar"><button class="back" id="home">← 終了</button><span class="sub">GM台本モード</span></div>
+    <div class="phasehdr"><span class="badge">${g.day}日目</span><h2 style="border:none;margin:0;">${phaseName}</h2></div>
+    <div id="scriptBody"></div>
+
+    <h3 style="margin-top:18px;">生存者（タップで死亡=本人に通知あり / もう一度タップで復活=通知なし）</h3>
+    <div class="players" id="players"></div>
+    <div class="winbox">
+      <div class="b w"><div class="num" id="wnum"></div>人狼</div>
+      <div class="b v"><div class="num" id="vnum"></div>村側（狂人含む）</div>
+    </div>
+    <div id="winmsg"></div>
+
+    <button class="btn" id="next"></button>
+    <button class="btn ghost" id="rulesLink">📖 ルールブックを開く</button>
+  `;
+  $('#home').onclick = ()=>{ if(confirm('ゲームを終了してホームに戻る？')) renderHome(); };
+  $('#rulesLink').onclick = renderRules;
+
+  const body = $('#scriptBody');
+  const say = (t)=>`<div class="script-say">${t}</div>`;
+  const note = (t)=>`<p class="script-note">📝 ${t}</p>`;
+  // GMが対象を記録する生存者ボタン列
+  const picker = (key,label,hint)=>{
+    const chips = alivePlayers().map(p=>`<div class="pchip ${g.pick[key]===p.idx?'sel':''}" data-pick="${key}" data-i="${p.idx}">${nameOf(p.idx)}</div>`).join('');
+    return `<div class="panel"><div class="sub">${label}</div><div class="players" style="margin-top:6px;">${chips}</div>${hint?`<p class="script-note">${hint}</p>`:''}</div>`;
+  };
+
+  let h='';
+  if(g.phase==='night'){
+    h += say('「全員、目を閉じてください」');
+    if(has('werewolf')){
+      h += say('「人狼さん、目を開けて。お互いを確認して、襲う人を1人、指差しで決めてください」');
+      h += picker('attack','① GM操作：人狼が襲った人をタップ');
+    }
+    if(has('seer')){
+      h += say('「占い師さん、占う相手を1人、指差しで選んでください」');
+      h += picker('seer','② GM操作：占い師が占った人をタップ');
+      if(g.pick.seer){
+        const isW = roleOf(g.pick.seer)==='werewolf';
+        const seerIdx = assignment.find(a=>a.roleId==='seer')?.idx;
+        const seerAlive = seerIdx && !game.alive.find(p=>p.idx===seerIdx).dead;
+        const sentKey = `${g.day}:${g.pick.seer}`;
+        const isSent = g.sent.seer === sentKey;
+        h += `<div class="${isW?'warnbox':'okbox'}">🔮 占い結果：${pNameOf(g.pick.seer)} は <strong>${isW?'人狼':'人狼ではない'}</strong></div>`;
+        if(seerAlive){
+          h += isSent
+            ? `<div class="okbox">✅ 占い師（${pNameOf(seerIdx)}）のスマホに送信済み</div>`
+            : `<button class="btn" id="sendSeer" style="background:var(--accent2); color:#fff;">📲 占い師（${pNameOf(seerIdx)}）のスマホに送信</button>
+               <p class="script-note">スマホが使えない場合は、GMが占い師本人にだけ口頭で伝えてください</p>`;
+        } else {
+          h += `<p class="script-note">⚠️ 占い師は脱落しているため送信ボタンなし</p>`;
+        }
+      }
+    }
+    if(has('knight')){
+      h += say('「騎士（狩人）さん、襲撃から守る人を1人、指差しで選んでください」');
+      h += picker('guard','③ GM操作：騎士が守った人をタップ','自分を守れるかは卓のルール次第（ルールブック参照）');
+    }
+    if(has('medium')){
+      if(g.lastExecuted){
+        const isW = roleOf(g.lastExecuted)==='werewolf';
+        const medIdx = assignment.find(a=>a.roleId==='medium')?.idx;
+        const medAlive = medIdx && !game.alive.find(p=>p.idx===medIdx).dead;
+        const sentKey = `${g.day}:${g.lastExecuted}`;
+        const isSent = g.sent.medium === sentKey;
+        h += say('「霊媒師さん、今日処刑された人を思い出してください」');
+        h += `<div class="${isW?'warnbox':'okbox'}">📿 霊媒結果：今日処刑された ${pNameOf(g.lastExecuted)} は <strong>${isW?'人狼だった':'人間だった'}</strong></div>`;
+        if(medAlive){
+          h += isSent
+            ? `<div class="okbox">✅ 霊媒師（${pNameOf(medIdx)}）のスマホに送信済み</div>`
+            : `<button class="btn" id="sendMedium" style="background:var(--accent2); color:#fff;">📲 霊媒師（${pNameOf(medIdx)}）のスマホに送信</button>
+               <p class="script-note">スマホが使えない場合は、GMが霊媒師本人にだけ口頭で伝えてください</p>`;
+        } else {
+          h += `<p class="script-note">⚠️ 霊媒師は脱落しているため送信ボタンなし</p>`;
+        }
+      } else {
+        h += note('霊媒師：今日まだ処刑者がいないので対象なし。');
+      }
+    }
+    h += say('「全員、目を閉じたまま……朝になります」');
+    h += note('対象を選んだら「朝にする」へ。朝に襲撃の結果が自動で出ます。');
+    if(g.day===1) h += note('初日は昼スタートで議論→投票→処刑のあと、この夜が最初の夜です。');
+  }
+  else if(g.phase==='morning'){
+    h += say('「朝になりました。全員、目を開けてください」');
+    if(!g.pick.attack){
+      h += `<div class="okbox">夜に人狼の襲撃先が選ばれていません。襲撃なし（平和）として進めるか、「夜」に戻って選んでください。</div>`;
+    } else if(g.pick.guard && g.pick.guard===g.pick.attack){
+      h += `<div class="okbox">🛡️ 騎士が ${pNameOf(g.pick.attack)} を守りました！<br><strong>今夜は誰も死にませんでした（平和）</strong></div>`;
+      h += say('「昨夜は……誰も襲われませんでした」');
+    } else {
+      const dead = g.alive.find(p=>p.idx===g.pick.attack);
+      const already = dead && dead.dead && dead.cause==='attack';
+      h += `<div class="warnbox">🐺 襲撃されたのは <strong>${pNameOf(g.pick.attack)}</strong></div>`;
+      h += say(`「昨夜、襲われたのは……${pNameOf(g.pick.attack)} です」`);
+      h += already ? `<div class="okbox">✅ 死亡を反映済み</div>`
+                   : `<button class="btn wolf" id="applyAttack">${pNameOf(g.pick.attack)} を死亡として反映する</button>`;
+    }
+    h += note('死んだ人は役職を明かさないのが標準（明かすルールもある→ルールブック）。');
+  }
+  else { // day
+    if(g.day===1){
+      h += say('「ゲームを始めます。まだ誰の正体も分かりません。これから議論してください」');
+      h += note('初日は全員生きてる状態で議論スタート。初日昼は長めに取ってもいい（例：5分）。');
+    } else {
+      h += say('「議論の時間です。誰が人狼か話し合ってください」');
+      h += note('時間を決めると締まる（例：3分）。GMは中立で。');
+    }
+    h += say('「投票です。せーので、吊りたい人を指差してください」');
+    h += picker('execute','GM操作：処刑が決まった人をタップ');
+    if(g.pick.execute){
+      const p = g.alive.find(x=>x.idx===g.pick.execute);
+      const applied = p && p.dead && p.cause==='execute';
+      h += applied ? `<div class="okbox">✅ ${pNameOf(g.pick.execute)} を処刑済み</div>`
+                   : `<button class="btn wolf" id="applyExec">${pNameOf(g.pick.execute)} を処刑する</button>`;
+    }
+    h += note('同票のときの決め方はルールブック参照。最終判定はGM。');
+  }
+  body.innerHTML = h;
+
+  // 対象選択
+  body.querySelectorAll('[data-pick]').forEach(c=>c.onclick=()=>{
+    g.pick[c.dataset.pick] = Number(c.dataset.i); renderScript();
+  });
+  // 襲撃を反映
+  const aa = $('#applyAttack'); if(aa) aa.onclick=()=>{
+    const p=g.alive.find(x=>x.idx===g.pick.attack);
+    if(p){p.dead=true; p.cause='attack';}
+    SYNC.postEvent(g.pick.attack, 'attacked', g.day); // ← プレイヤーに通知
+    renderScript();
+  };
+  // 処刑を反映（霊媒用に記録）
+  const ae = $('#applyExec'); if(ae) ae.onclick=()=>{
+    const p=g.alive.find(x=>x.idx===g.pick.execute);
+    if(p){p.dead=true; p.cause='execute';}
+    g.lastExecuted=g.pick.execute;
+    SYNC.postEvent(g.pick.execute, 'executed', g.day); // ← プレイヤーに通知
+    renderScript();
+  };
+  // 占い結果送信
+  const sSeer = $('#sendSeer'); if(sSeer) sSeer.onclick=()=>{
+    const seerIdx = assignment.find(a=>a.roleId==='seer')?.idx;
+    if(!seerIdx) return;
+    const target = g.pick.seer;
+    const isWolf = roleOf(target)==='werewolf';
+    const targetName = assignment.find(a=>a.idx===target)?.name || '';
+    SYNC.postEvent(seerIdx, 'seer_result', g.day, {target_idx:target, target_name:targetName, is_wolf:isWolf});
+    g.sent.seer = `${g.day}:${target}`;
+    renderScript();
+  };
+  // 霊媒結果送信
+  const sMed = $('#sendMedium'); if(sMed) sMed.onclick=()=>{
+    const medIdx = assignment.find(a=>a.roleId==='medium')?.idx;
+    if(!medIdx || !g.lastExecuted) return;
+    const target = g.lastExecuted;
+    const isWolf = roleOf(target)==='werewolf';
+    const targetName = assignment.find(a=>a.idx===target)?.name || '';
+    SYNC.postEvent(medIdx, 'medium_result', g.day, {target_idx:target, target_name:targetName, is_wolf:isWolf});
+    g.sent.medium = `${g.day}:${target}`;
+    renderScript();
+  };
+
+  // 生存者チップ（手動修正用）
+  const pl = $('#players');
+  pl.innerHTML = g.alive.map(p=>`<div class="pchip ${p.dead?'dead':''}" data-i="${p.idx}">${nameOf(p.idx)}</div>`).join('');
+  pl.querySelectorAll('.pchip').forEach(c=>c.onclick=()=>{
+    const p = g.alive.find(x=>x.idx==c.dataset.i);
+    if(p.dead){
+      // 復活 → 通知は出さない（GMが口頭で訂正する想定）
+      p.dead = false; p.cause = null;
+    } else {
+      // 死亡 → 現フェーズから原因を推測して通知
+      p.dead = true;
+      if(g.phase === 'day'){
+        p.cause = 'execute';
+        g.lastExecuted = p.idx; // 霊媒の参照用にも更新
+        SYNC.postEvent(p.idx, 'executed', g.day);
+      } else {
+        p.cause = 'attack';
+        SYNC.postEvent(p.idx, 'attacked', g.day);
+      }
+    }
+    renderScript();
+  });
+
+  // 勝敗判定（決着なら winner='village' or 'wolves'、未決着なら null）
+  const winner = judgeWinner();
+
+  // 次へ / 結果を見る
+  if(winner){
+    $('#next').textContent = '🎉 結果を見る ▶';
+    $('#next').classList.add('wolf');
+    $('#next').onclick = ()=> renderGameOver(winner);
+  } else {
+    $('#next').classList.remove('wolf');
+    const nextLabel = {night:'朝にする ☀️', morning:'昼にする 🗣️', day:'夜にする 🌙'}[g.phase];
+    $('#next').textContent = nextLabel;
+    $('#next').onclick = ()=>{
+      if(g.phase==='night') g.phase='morning';
+      else if(g.phase==='morning'){ g.phase='day'; g.pick.execute=null; }
+      else { g.phase='night'; g.day++; g.pick={attack:null,guard:null,seer:null,execute:null}; }
+      renderScript();
+    };
+  }
+  updateWin(winner);
+}
+
+function judgeWinner(){
+  const w = aliveWolves();
+  const tot = aliveTotal();
+  const v = tot - w;
+  if(w===0) return 'village';
+  if(w>=v) return 'wolves';
+  return null;
+}
+
+function updateWin(winner){
+  const w = aliveWolves();
+  const tot = aliveTotal();
+  const v = tot - w; // 村側（狂人含む人間側の頭数）
+  $('#wnum').textContent = w;
+  $('#vnum').textContent = v;
+  let msg='';
+  if(winner==='village'){
+    msg = `<div class="okbox" style="font-size:1.05rem;">🎉 <strong>村人陣営の勝ち！</strong>（人狼全滅・狂人も負け）<br><span class="sub">下の「結果を見る」を押して全員の正体を公開してください</span></div>`;
+  } else if(winner==='wolves'){
+    msg = `<div class="warnbox" style="font-size:1.05rem;">🐺 <strong>人狼陣営の勝ち！</strong>（人狼が村側と同数以上・狂人も勝ち）<br><span class="sub">下の「結果を見る」を押して全員の正体を公開してください</span></div>`;
+  } else {
+    msg = `<p class="sub">勝敗の目安：人狼が全滅で村勝ち／人狼が村側と同数になったら人狼勝ち。最終判定はGM。</p>`;
+  }
+  const el = document.getElementById('winmsg'); if(el) el.innerHTML = msg;
+}
+
+/* =========================================================
+   結果画面
+   ========================================================= */
+function renderGameOver(winner){
+  // プレイヤースマホに通知（broadcast）
+  const idxList = assignment.map(a=>a.idx);
+  SYNC.broadcastGameOver(idxList, winner, game.day);
+
+  const isVillage = winner==='village';
+  const headColor = isVillage ? '#4f9d69' : '#c0453d';
+  const headEmoji = isVillage ? '🎉' : '🐺';
+  const headLabel = isVillage ? '村人陣営の勝ち！' : '人狼陣営の勝ち！';
+
+  // 全員の正体を公開
+  const rows = assignment.map(a=>{
+    const r = ROLES[a.roleId];
+    const ap = game.alive.find(x=>x.idx===a.idx);
+    const isWinner = (winner==='village' && r.team==='村') || (winner==='wolves' && r.team==='人狼');
+    const cause = ap.cause==='attack' ? '🐺 襲撃' : ap.cause==='execute' ? '⚖️ 処刑' : ap.dead ? '💀 死亡' : '✅ 生存';
+    return `<div class="counter">
+      <div class="info">
+        <span class="name">${nameOf(a.idx)}</span>
+        <span class="pill ${r.color}" style="margin-left:6px;">${r.emoji} ${r.name}</span>
+        ${isWinner?'<span class="pill vill" style="margin-left:6px;">勝</span>':'<span class="pill wolf" style="margin-left:6px;">負</span>'}
+      </div>
+      <div class="sub">${cause}</div>
+    </div>`;
+  }).join('');
+
+  app.innerHTML = `
+    <div class="center" style="padding-top:18px;">
+      <div style="font-size:4rem;">${headEmoji}</div>
+      <h1 style="border:none; color:${headColor};">${headLabel}</h1>
+      <p class="sub">${game.day}日目で決着</p>
+    </div>
+    <h2>全員の正体</h2>
+    <div class="card">${rows}</div>
+    <button class="btn" id="again">🔄 もう一度（同じメンバーで再配役）</button>
+    <button class="btn sec" id="setup">⚙️ 構成を変えてやり直す</button>
+    <button class="btn ghost" id="home">🏠 やめる（ホームへ）</button>
+  `;
+  $('#again').onclick = ()=>{
+    if(!confirm('同じメンバーで再配役する？\n（役職はシャッフルし直されます）')) return;
+    game = null;
+    dealRoles(); // 名前は引き継がれる
+  };
+  $('#setup').onclick = ()=>{
+    game = null;
+    renderSetup();
+  };
+  $('#home').onclick = ()=>{
+    game = null;
+    renderHome();
+  };
+}
+
+/* =========================================================
+   ルールブック（読むだけ版）
+   ========================================================= */
+function renderRules(){
+  const roleCards = ROLE_ORDER.map(rid=>{
+    const r=ROLES[rid];
+    return `<details>
+      <summary>${r.emoji} ${r.name} <span class="pill ${r.color}">${r.side}</span></summary>
+      <div class="body">
+        <p><strong>夜の能力：</strong>${r.night}</p>
+        <div class="twocol">
+          ${r.can.map(x=>`<div class="do">○ ${x}</div>`).join('')}
+          ${r.cant.map(x=>`<div class="dont">× ${x}</div>`).join('')}
+        </div>
+        <p>💡 ${r.mistake}</p>
+      </div>
+    </details>`;
+  }).join('');
+
+  app.innerHTML = `
+    <div class="topbar"><button class="back" id="back">← 戻る</button><span class="sub">ルールブック</span></div>
+    <h1>📖 ルールブック</h1>
+    <p class="sub">迷ったらここ。卓で意見が割れたら、まずこれを見て揃える。</p>
+
+    <h2>① はじめての人へ（30秒）</h2>
+    <div class="card">
+      <p><strong>2つのチームに分かれて戦う。</strong></p>
+      <p>🧑‍🌾 <strong>村人陣営</strong>：人狼を全員処刑できれば勝ち。<br>🐺 <strong>人狼陣営</strong>：村人を減らして、人狼の数が村側と同じになれば勝ち。</p>
+      <p>でも——<strong>誰が人狼かは本人と仲間しか知らない。</strong></p>
+      <p><strong>昼：</strong>みんなで議論して、怪しい人を1人「処刑」する。<br><strong>夜：</strong>人狼がこっそり村人を1人「襲撃」する。占い師などはこの時に能力を使う。</p>
+      <p><strong>初日は「昼」から始まる</strong>（まず議論）。これを昼→夜→翌朝（襲撃結果）→昼→夜…と繰り返す。</p>
+      <details><summary>よくある超初歩の疑問</summary>
+        <div class="body">
+          <p><strong>Q. 自分の役職、喋っていいの？</strong><br>A. 喋ってOK。むしろ「私は占い師」と名乗る駆け引きが人狼の醍醐味。ただし本当か嘘かは自由（人狼が占い師を騙ることも）。</p>
+          <p><strong>Q. 死んだらどうする？</strong><br>A. それ以降は喋らない・ジェスチャーもしない。生きてる人だけで進める。</p>
+          <p><strong>Q. 夜は何をするの？</strong><br>A. GMの合図で全員目を閉じる。能力を持つ人だけが順番に目を開けて、指差しで対象を選ぶ。</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>② 役職ごとの能力</h2>
+    ${roleCards}
+
+    <h2>③ 初心者向け：役職の使い方</h2>
+    <p class="sub">「能力」じゃなくて「<strong>役回り</strong>」が分かると、人狼は一気に面白くなる。各役の<strong>本当の楽しみどころ</strong>はここ。</p>
+
+    <details>
+      <summary>🧑‍🌾 村人：唯一の武器は「議論」</summary>
+      <div class="body">
+        <p><strong>能力がないから弱い、ではない。</strong>議論で人狼を追い詰める一番大事な役。</p>
+        <p>・違和感を口にする勇気（「あの発言、なんか変やった」）<br>・占い師・霊媒師の言うことを聞いて、誰が嘘ついてるか見抜く<br>・自分は村人やから基本COしない（「私村人です」は言う意味がない）</p>
+        <p>💡 黙ってると人狼に「あいつ大人しいから吊っても大丈夫」と狙われる。<strong>下手でも喋ること</strong>が村人の仕事。</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>🐺 人狼：夜は連携、昼は演技</summary>
+      <div class="body">
+        <p><strong>仲間以外には正体を知られてはいけない。</strong></p>
+        <p>・夜：人狼仲間で襲撃相手を決める。<strong>一番の脅威は占い師</strong>（自分たちが「人狼」とバレるから）<br>・昼：村人になりきって議論に参加。怪しまれたら逆に「私は村人」と必死で訴える</p>
+        <p>💡 上級テク：<strong>占い師や霊媒師を騙る（かたる）</strong>。「私こそが占い師。本物を名乗ってる奴は偽物の人狼です」と嘘の宣言。本物の占い師と対立して、村人を混乱させる。これが人狼の一番の見せ場。</p>
+        <p>💡 仲間の人狼を守りすぎないこと。露骨に庇うとバレる。たまには仲間を切り捨てる演技も必要。</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>🔮 占い師：いつ「私が占い師」と言うか</summary>
+      <div class="body">
+        <p><strong>占い結果を知るのは前哨戦。本番は「COのタイミング」。</strong></p>
+        <p>COとは <strong>カミングアウト</strong> ＝ 昼に「私が占い師です」と名乗ること。</p>
+        <p><strong>早くCO：</strong>情報を村全員に伝えられる／その夜に人狼に襲撃される（最大の脅威だから）<br><strong>黙る：</strong>生き延びるが、情報が活きない／死んだら誰も知らないまま終わる</p>
+        <p>💡 標準的な戦術：「人狼を見つけたら即CO」。「白だった」ときは黙って次の夜に賭ける、など。</p>
+        <p>💡 <strong>人狼にも占い師を騙られる</strong>と「本物はどっち」の戦いに。<strong>占い結果の発言の整合性</strong>で村人が見抜く。「3日目にあの人を占って黒だったって言ってたのに、今日は白って言うんか？」みたいな。</p>
+        <p>💡 占い結果は紙には残らない（アプリは本人にしか送らない）。<strong>口頭で伝える/伝えないは本人の戦略</strong>。</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>🛡️ 騎士（狩人）：誰を守るかが全て</summary>
+      <div class="body">
+        <p><strong>占い師や霊媒師がCOしたら、その人を護衛するのが基本。</strong></p>
+        <p>・COされた人はその夜に襲撃される確率が高い → 騎士が守れば「平和（誰も死なない）」が起きる<br>・平和が起きたら「あ、騎士が守ったんやな」と村が分かる → 騎士の存在が証明される<br>・誰を守ったかは<strong>口に出さない</strong>（人狼に推理されると次の標的が分かるから）</p>
+        <p>💡 <strong>騎士もCOしない</strong>のが基本。「私騎士」と言った瞬間、次に襲われる。</p>
+        <p>💡 誰もCOしてない夜は？→ 自分が「次に占い師がCOしそう」と思う人 or 「人狼に狙われそう」と思う人を守る。これは経験と勘。</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>📿 霊媒師：占い師と情報パズル</summary>
+      <div class="body">
+        <p><strong>処刑された人が人狼だったか分かる。これも昼にCOすれば村が一気に有利。</strong></p>
+        <p>・昼にCO「昨日処刑したのは人狼でした！」→ 村に「正しい吊り」が確定する → 残りの人狼を追い詰めやすい<br>・でもCOしたら次の襲撃ターゲット（占い師と同じジレンマ）</p>
+        <p>💡 <strong>占い師との情報パズル</strong>が面白い。占い師が「3番は黒」と言って吊られた3番が、霊媒で「人狼でした」と出れば占い師が本物と分かる。逆に「人間でした」と出たら、その占い師が偽物（人狼か狂人）。</p>
+        <p>💡 占い師と霊媒師が両方CO ＝ 村が情報で勝てる。だから人狼は両方を早く襲いたい。</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>🤡 狂人：人狼を勝たせるかく乱役</summary>
+      <div class="body">
+        <p><strong>村人と同じ「人間」やが、人狼陣営の勝利を目指す変な役。</strong></p>
+        <p>・人狼が誰かは知らない（人狼側も狂人を知らない）<br>・占われると「人狼ではない（白）」と出る → 村人として通る<br>・夜の能力はない</p>
+        <p>💡 主な仕事は<strong>かく乱</strong>。「私が占い師」と嘘のCOをして、本物の占い師を村から追い出す。人狼を吊らせない方向に議論を誘導する。</p>
+        <p>💡 上手い狂人：人狼から見ても「あいつ味方や」と分かる動き方をする。例：本物の占い師と対立CO → 本物が偽物扱いされて吊られる。</p>
+        <p>💡 下手な狂人：露骨に人狼を庇って自分も吊られる。狂人は<strong>自分が吊られるのが一番痛い</strong>（村に1票プレゼントしてしまう）。</p>
+      </div>
+    </details>
+
+    <div class="okbox" style="margin-top:14px;">
+      <strong>👀 GMからのおすすめ：</strong>初心者卓では、最初の1〜2ゲームは「占い師さん、CO（カミングアウト）してみたら？」とGMが促すと、議論がぐっと面白くなる。慣れてきたら戦略は本人任せで。
+    </div>
+
+    <h2>④ 揉めやすいルール</h2>
+    <p class="sub">どれも「正解」はない。卓ごとに最初に決めるのが大事。一般的にどうかを書いておく。</p>
+
+    <details>
+      <summary>連続ガード（騎士が同じ人を続けて守る）</summary>
+      <div class="body">
+        <p>前の夜に守った人を、次の夜も続けて守れるか。</p>
+        <p><strong>禁止が一般的。</strong>連続で守れると騎士が強くなりすぎるため。ただし「アリ」にする卓もある。最初に決めておく。</p>
+      </div>
+    </details>
+    <details>
+      <summary>初日は昼スタート（議論から）</summary>
+      <div class="body">
+        <p><strong>このアプリは「初日昼スタート」を標準にしています。</strong>1日目はまず議論→投票→処刑をやってから、最初の夜（占い・襲撃・霊媒・護衛）に入ります。</p>
+        <p>理由：初日朝にいきなり誰か死んでると、その人の発言を聞かないまま議論することになって、初手の楽しさが削られるため。</p>
+        <p>別の卓のルールでは「初日夜から襲撃あり」もあります。その場合は1日目朝に1人襲撃されていて、議論はそこから始まる流れ。お好みで。</p>
+      </div>
+    </details>
+    <details>
+      <summary>騎士は自分を守れる？</summary>
+      <div class="body">
+        <p><strong>自分は守れない</strong>のが一般的。自衛アリにすると騎士が落ちにくくなる。</p>
+      </div>
+    </details>
+    <details>
+      <summary>処刑・襲撃された人の役職を公開する？</summary>
+      <div class="body">
+        <p><strong>非公開が一般的</strong>（誰が何だったか分からないまま進む方がスリリング）。</p>
+        <p>初心者卓では「公開アリ」で分かりやすくすることも。霊媒師がいる場合は非公開のほうが霊媒師の価値が出る。</p>
+      </div>
+    </details>
+    <details>
+      <summary>投票が同票になったら</summary>
+      <div class="body">
+        <p>よくある決め方：<br>① 同票者だけで<strong>決選投票</strong><br>② それでも同じなら<strong>その日は誰も処刑しない（平和）</strong><br>③ または<strong>ランダム／GM裁定</strong></p>
+        <p>どれでもOK。最初に決めておけば揉めない。</p>
+      </div>
+    </details>
+    <details>
+      <summary>GMの裁定権・突然死</summary>
+      <div class="body">
+        <p><strong>GMの言うことが最終。</strong>ルールで割れたらGMが決めて先に進む（楽しさ優先）。</p>
+        <p>死んだ人が喋る・生きてる人にこっそり伝える等の反則は、GM判断で「突然死（即脱落）」にすることもある。</p>
+      </div>
+    </details>
+    <details>
+      <summary>初心者がやりがちな反則</summary>
+      <div class="body">
+        <p>× 占い結果や役職を紙・スマホにメモして見せる<br>× 夜にこっそり目を開けて他人を見る<br>× 死んだあとに表情や声で生存者に合図する<br>× 「絶対村人だから！」と神に誓う系の強弁（嘘がつけるゲームなので無意味）</p>
+        <p>悪気なくやりがち。最初に「これはナシね」と共有しておくと平和。</p>
+      </div>
+    </details>
+
+    <button class="btn sec" id="back2" style="margin-top:18px;">← 戻る</button>
+  `;
+  $('#back').onclick = backFromRules;
+  $('#back2').onclick = backFromRules;
+}
+function backFromRules(){ if(game) renderScript(); else renderHome(); }
+
+/* =========================================================
+   状態同期レイヤー（Firebase Realtime Database）
+   - 初期は何もしないフォールバック実装
+   - HEAD側の firebase init module が "firebase-ready" を発火したら、
+     window.__firebaseSYNC で本物の実装に差し替わる
+   ========================================================= */
+let SYNC = {
+  postEvent: async ()=>{},
+  subscribePlayer: ()=> ()=>{}, // unsubscribe関数を返す
+  resetAll: async ()=>{},
+  broadcastGameOver: async ()=>{},
+  apiAvail: ()=> false
+};
+if(window.__firebaseSYNC){
+  SYNC = window.__firebaseSYNC; // moduleが先に読み込まれてた場合
+}
+window.addEventListener('firebase-ready', ()=>{
+  SYNC = window.__firebaseSYNC;
+  console.log('[SYNC] Firebase実装に差し替え完了');
+});
+
+/* ---- 起動 ---- */
+render();
+</script>
+</body>
+</html>
