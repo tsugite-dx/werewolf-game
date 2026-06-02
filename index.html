@@ -1277,8 +1277,27 @@ window.addEventListener('firebase-ready', ()=>{
   console.log('[SYNC] Firebase実装に差し替え完了');
 });
 
-/* ---- 起動 ---- */
-render();
+/* ---- 起動：Firebase 初期化完了を待ってから render() を呼ぶ ---- */
+let __started = false;
+function __startApp(){
+  if(__started) return;
+  __started = true;
+  console.log('[Init] アプリ起動');
+  render();
+}
+if(window.__firebaseSYNC){
+  // 既に moduleスクリプトの初期化が完了してた場合
+  __startApp();
+} else {
+  window.addEventListener('firebase-ready', __startApp, {once: true});
+  // 5秒経ってもFirebaseが来なければオフライン扱いで起動（最低限HTMLは見れるように）
+  setTimeout(()=>{
+    if(!__started){
+      console.warn('[Init] Firebaseが初期化されないまま起動します（通知系は動きません）');
+      __startApp();
+    }
+  }, 5000);
+}
 </script>
 </body>
 </html>
