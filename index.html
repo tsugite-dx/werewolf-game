@@ -562,6 +562,49 @@ function renderPlayerRole(code){
   const youAre = d.n ? `${d.n} さん（プレイヤー ${d.i}）` : `プレイヤー ${d.i}`;
   let lastDeath = null; // 受信した死亡イベント
 
+  /* ---- 画面スリープ防止（Wake Lock）---- */
+  let wakeLock = null;
+  const acquireWakeLock = async ()=>{
+    if(!('wakeLock' in navigator)) { console.log('[WakeLock] 未対応端末'); return; }
+    try{
+      wakeLock = await navigator.wakeLock.request('screen');
+      console.log('[WakeLock] 取得成功');
+      wakeLock.addEventListener('release', ()=>{ wakeLock = null; });
+    }catch(e){ console.warn('[WakeLock] 失敗', e); }
+  };
+  // 画面が前面に戻ったら再取得（バックグラウンドになると解放されるため）
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible' && !wakeLock) acquireWakeLock();
+  });
+
+  /* ---- 音通知（Web Audio API でビープ生成、音声ファイル不要）---- */
+  let audioCtx = null;
+  const initAudio = ()=>{
+    if(audioCtx) return;
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){}
+  };
+  const beep = (pattern)=>{ // pattern: [{f:440,d:200}, ...]
+    if(!audioCtx) return;
+    let t = audioCtx.currentTime;
+    pattern.forEach(({f,d,type='sine',vol=0.18})=>{
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type=type; osc.frequency.value=f;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(vol, t+0.02);
+      gain.gain.linearRampToValueAtTime(0, t+d/1000);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t); osc.stop(t+d/1000);
+      t += d/1000 + 0.04;
+    });
+  };
+  const SOUND = {
+    death: ()=> beep([{f:330,d:250},{f:220,d:400}]),         // 低音2発
+    result:()=> beep([{f:660,d:120},{f:880,d:120}]),         // 軽い「ポーン」
+    win:   ()=> beep([{f:660,d:150},{f:880,d:150},{f:1175,d:300}]), // 明るい上昇
+    lose:  ()=> beep([{f:440,d:200},{f:330,d:200},{f:220,d:400}]),  // 沈む下降
+  };
+
   // 「カバー → 表示 → 隠す」をループできるように関数化
   const showCover = ()=>{
     if(lastDeath) return showDeath(lastDeath);
@@ -571,8 +614,14 @@ function renderPlayerRole(code){
         <h2 style="border:none;justify-content:center;">あなたは ${youAre}</h2>
         <p class="sub">周りに見られていないのを確認して<br>下のボタンを押してください。</p>
         <button class="btn" id="show" style="margin-top:24px;">役職を確認する 👁️</button>
+        <p class="sub" style="margin-top:18px;">📱 画面を開いたまま机に置いておいてください。<br>議論中に画面が消えると通知が届きません。</p>
       </div>`;
-    $('#show').onclick = showRole;
+    $('#show').onclick = ()=>{
+      // ★ユーザー操作の延長で WakeLock 要求 & AudioContext 起動
+      acquireWakeLock();
+      initAudio();
+      showRole();
+    };
   };
   const showRole = ()=>{
     if(lastDeath) return showDeath(lastDeath);
@@ -659,6 +708,7 @@ function renderPlayerRole(code){
         <p class="sub center" style="margin-top:14px;">お疲れさまでした。<br>GMの案内を待ってください。</p>
       </div>`;
     if(navigator.vibrate) try{ navigator.vibrate(iWin?[100,50,100,50,200]:[300]); }catch(e){}
+    (iWin ? SOUND.win : SOUND.lose)();
   };
 
   // 占い・霊媒の結果通知（オーバーレイで表示、閉じれば前の画面に戻る）
@@ -690,6 +740,7 @@ function renderPlayerRole(code){
       else showHidden();
     };
     if(navigator.vibrate) try{ navigator.vibrate([80,40,80]); }catch(e){}
+    SOUND.result();
   };
 
   // 自分宛イベント購読（死亡 / 勝敗 / 占い結果 / 霊媒結果）
@@ -703,6 +754,7 @@ function renderPlayerRole(code){
       lastDeath = death;
       showDeath(death);
       if(navigator.vibrate) try{ navigator.vibrate([180,80,180]); }catch(e){}
+      SOUND.death();
     }
     // 占い・霊媒結果（最新のものを表示）
     const result = events.filter(e=>e.type==='seer_result' || e.type==='medium_result').pop();
