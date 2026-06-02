@@ -140,20 +140,19 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// 今は固定のゲームID（1卓のみ）。将来ルームコード化する
-const GAME_ID = 'default';
+// 卓コード（ルームコード）：window.__currentRoom が真の値。
+// なければ 'default'（後方互換）。
+function getRoom(){ return window.__currentRoom || 'default'; }
 
-// 既存のSYNCインターフェースを実装。これを window に登録して、
-// メインスクリプト側がフォールバックから差し替える。
 window.__firebaseSYNC = {
   async postEvent(idx, type, day, extra){
     try{
-      const r = ref(db, `games/${GAME_ID}/events/${idx}`);
+      const r = ref(db, `games/${getRoom()}/events/${idx}`);
       await push(r, Object.assign({type, day, ts: Date.now()}, extra||{}));
     }catch(e){ console.warn('postEvent failed', e); }
   },
   subscribePlayer(idx, cb){
-    const r = ref(db, `games/${GAME_ID}/events/${idx}`);
+    const r = ref(db, `games/${getRoom()}/events/${idx}`);
     const handler = (snap)=>{
       const ev = snap.val();
       if(ev) cb([ev]);
@@ -163,7 +162,7 @@ window.__firebaseSYNC = {
   },
   async resetAll(){
     try{
-      const r = ref(db, `games/${GAME_ID}`);
+      const r = ref(db, `games/${getRoom()}`);
       await remove(r);
     }catch(e){ console.warn('resetAll failed', e); }
   },
@@ -174,7 +173,7 @@ window.__firebaseSYNC = {
 };
 
 window.dispatchEvent(new CustomEvent('firebase-ready'));
-console.log('[Firebase] 接続完了 / gameId=' + GAME_ID);
+console.log('[Firebase] 接続完了（卓コードはGM画面で発行/QRから受け取り）');
 </script>
 <script>
 /* =========================================================
@@ -255,7 +254,25 @@ function encodeRole(idx,roleId,total,name){ return btoa(unescape(encodeURICompon
 function decodeRole(s){ try{ return JSON.parse(decodeURIComponent(escape(atob(s)))); }catch(e){ return null; } }
 function roleUrl(idx,roleId,total,name){
   const base = location.origin + location.pathname;
-  return base + '?p=' + encodeRole(idx,roleId,total,name);
+  const room = window.__currentRoom || '';
+  const roomPart = room ? '&r='+encodeURIComponent(room) : '';
+  return base + '?p=' + encodeRole(idx,roleId,total,name) + roomPart;
+}
+
+/* 卓コード（ルームコード）生成：紛らわしい文字（0/O/1/I/L）は除外、3文字 */
+function generateRoomCode(){
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for(let i=0; i<3; i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+function setRoom(code){
+  window.__currentRoom = code;
+  console.log('[Room] 卓コードを設定:', code);
+}
+function clearRoom(){
+  window.__currentRoom = null;
+  console.log('[Room] 卓コードをクリア');
 }
 
 /* =========================================================
@@ -264,12 +281,20 @@ function roleUrl(idx,roleId,total,name){
 function render(){
   // 役職表示ページ（?p=...）優先
   const params = new URLSearchParams(location.search);
-  if(params.get('p')){ renderPlayerRole(params.get('p')); return; }
+  if(params.get('p')){
+    // URLから卓コードも読み取って設定
+    const r = params.get('r');
+    if(r) setRoom(r);
+    renderPlayerRole(params.get('p'));
+    return;
+  }
   renderHome();
 }
 
 /* ---- ホーム ---- */
 function renderHome(){
+  // ホームに戻ったら卓コードをクリア（次のゲームは新しい卓として始める）
+  clearRoom();
   app.innerHTML = `
     <div class="center" style="padding-top:18px;">
       <div style="font-size:3rem;">🐺</div>
@@ -278,10 +303,27 @@ function renderHome(){
     </div>
     <button class="btn" id="start">🎭 ゲームを始める（GM）</button>
     <button class="btn sec" id="rules">📖 ルールブック</button>
-    <p class="footnote">役職を配って、GMの台本どおり進めるだけ。<br>判定で迷ったらルールブックを開けば一発。</p>
+    <p class="footnote">役職を配って、GMの台本どおり進めるだけ。<br>判定で迷ったらルールブックを開けば一発。<br>複数卓の同時運用に対応（各GMが個別に立ち上げOK）。</p>
   `;
-  $('#start').onclick = renderSetup;
+  $('#start').onclick = ()=>{
+    // GM画面に入る時点で新しい卓コードを発行
+    setRoom(generateRoomCode());
+    renderSetup();
+  };
   $('#rules').onclick = renderRules;
+}
+
+/* GM画面の上部に出す「卓コード」バナー */
+function roomBanner(){
+  const code = window.__currentRoom;
+  if(!code) return '';
+  return `<div class="card" style="background:linear-gradient(135deg,#2a3a5e,#1a2438); border-color:var(--accent2); margin-top:0;">
+    <div class="row between">
+      <span class="sub">この卓のコード</span>
+      <span style="font-size:1.8rem; font-weight:800; letter-spacing:.15em; color:var(--accent);">${code}</span>
+    </div>
+    <p class="sub" style="margin:.3em 0 0;">参加者に伝えてください。複数卓を同時運用する場合の識別子です。</p>
+  </div>`;
 }
 
 /* ---- セットアップ（人数→役職構成） ---- */
@@ -289,6 +331,7 @@ function renderSetup(){
   if(totalCount()===0) comp = recommend(8);
   app.innerHTML = `
     <div class="topbar"><button class="back" id="back">← 戻る</button><span class="sub">セットアップ</span></div>
+    ${roomBanner()}
     <h2>参加人数とおすすめ構成</h2>
     <div class="card">
       <div class="row between">
@@ -389,6 +432,7 @@ function renderDistribute(){
   const total = assignment.length;
   app.innerHTML = `
     <div class="topbar"><button class="back" id="back">← 構成に戻る</button><span class="sub">配役できた（${total}人）</span></div>
+    ${roomBanner()}
     <div class="card">
       <div class="row between">
         <div>
@@ -560,6 +604,7 @@ function renderPlayerRole(code){
   }
   const r = ROLES[d.r];
   const youAre = d.n ? `${d.n} さん（プレイヤー ${d.i}）` : `プレイヤー ${d.i}`;
+  const roomTag = window.__currentRoom ? `<div class="sub center" style="margin-top:4px;">この卓のコード：<strong style="color:var(--accent); letter-spacing:.15em;">${window.__currentRoom}</strong></div>` : '';
   let lastDeath = null; // 受信した死亡イベント
 
   /* ---- 画面スリープ防止（Wake Lock）---- */
@@ -612,6 +657,7 @@ function renderPlayerRole(code){
       <div class="overlay center">
         <div style="font-size:2.5rem;">🤫</div>
         <h2 style="border:none;justify-content:center;">あなたは ${youAre}</h2>
+        ${roomTag}
         <p class="sub">周りに見られていないのを確認して<br>下のボタンを押してください。</p>
         <button class="btn" id="show" style="margin-top:24px;">役職を確認する 👁️</button>
         <p class="sub" style="margin-top:18px;">📱 画面を開いたまま机に置いておいてください。<br>議論中に画面が消えると通知が届きません。</p>
@@ -795,7 +841,7 @@ function renderScript(){
   const g = game;
   const phaseName = {night:'🌙 夜', morning:'☀️ 朝', day:'🗣️ 昼（議論・投票）'}[g.phase];
   app.innerHTML = `
-    <div class="topbar"><button class="back" id="home">← 終了</button><span class="sub">GM台本モード</span></div>
+    <div class="topbar"><button class="back" id="home">← 終了</button><span class="sub">GM台本モード ${window.__currentRoom?'卓:'+window.__currentRoom:''}</span></div>
     <div class="phasehdr"><span class="badge">${g.day}日目</span><h2 style="border:none;margin:0;">${phaseName}</h2></div>
     <div id="scriptBody"></div>
 
